@@ -46,11 +46,18 @@ jobs:
             cp .env.example .env
           fi
 
-          # Ensure debug.keystore is restored from base64 if needed
-          if [ ! -f debug.keystore ] && [ -f debug.keystore.base64 ]; then
-            echo "Restoring debug.keystore from base64..."
-            base64 -d debug.keystore.base64 > debug.keystore
+          # Ensure debug.keystore exists (restore from base64 or generate if missing)
+          if [ ! -f debug.keystore ]; then
+            if [ -f debug.keystore.base64 ]; then
+              echo "Restoring debug.keystore from base64..."
+              base64 -d debug.keystore.base64 > debug.keystore || true
+            fi
+            if [ ! -f debug.keystore ] || [ ! -s debug.keystore ]; then
+              echo "debug.keystore not found or empty, generating via keytool..."
+              keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+            fi
           fi
+          ls -la debug.keystore
 
           # Ensure gradle wrapper is executable
           chmod +x gradlew

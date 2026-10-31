@@ -1,0 +1,125 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile containing identity and company association.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "companyId": { "type": "string" },
+        "role": { "type": "string", "enum": ["owner", "admin", "member"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "createdAt"]
+    },
+    "Company": {
+      "title": "Company",
+      "description": "Multi-tenant company organization profile and branding preferences.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "slug": { "type": "string" },
+        "brandColor": { "type": "string" },
+        "currency": { "type": "string" },
+        "locale": { "type": "string" },
+        "defaultThreshold": { "type": "integer" },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "brandColor", "currency", "ownerId", "createdAt"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Stock inventory product item.",
+      "type": "object",
+      "properties": {
+        "companyId": { "type": "string" },
+        "sku": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "categoryId": { "type": "string" },
+        "stock": { "type": "integer" },
+        "threshold": { "type": "integer" },
+        "unitPrice": { "type": "number" },
+        "archived": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["companyId", "sku", "name", "stock", "threshold", "createdAt"]
+    },
+    "Movement": {
+      "title": "Movement",
+      "description": "Inventory stock movement (entry or exit).",
+      "type": "object",
+      "properties": {
+        "companyId": { "type": "string" },
+        "productId": { "type": "string" },
+        "productName": { "type": "string" },
+        "type": { "type": "string", "enum": ["in", "out"] },
+        "quantity": { "type": "integer" },
+        "reason": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["companyId", "productId", "type", "quantity", "createdAt"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Product category classification.",
+      "type": "object",
+      "properties": {
+        "companyId": { "type": "string" },
+        "name": { "type": "string" },
+        "color": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["companyId", "name", "createdAt"]
+    },
+    "StockAlert": {
+      "title": "StockAlert",
+      "description": "Low stock alert triggered when product inventory drops below threshold.",
+      "type": "object",
+      "properties": {
+        "companyId": { "type": "string" },
+        "productId": { "type": "string" },
+        "productName": { "type": "string" },
+        "currentStock": { "type": "integer" },
+        "threshold": { "type": "integer" },
+        "resolved": { "type": "boolean" },
+        "triggeredAt": { "type": "string", "format": "date-time" },
+        "resolvedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["companyId", "productId", "resolved", "triggeredAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User accounts and tenant association"
+    },
+    "/companies/{companyId}": {
+      "schema": { "$ref": "#/entities/Company" },
+      "description": "Company entity profile and settings"
+    },
+    "/companies/{companyId}/products/{productId}": {
+      "schema": { "$ref": "#/entities/Product" },
+      "description": "Products managed under the company"
+    },
+    "/companies/{companyId}/movements/{movementId}": {
+      "schema": { "$ref": "#/entities/Movement" },
+      "description": "Stock movements in and out for company products"
+    },
+    "/companies/{companyId}/categories/{categoryId}": {
+      "schema": { "$ref": "#/entities/Category" },
+      "description": "Product categories in the company"
+    },
+    "/companies/{companyId}/alerts/{alertId}": {
+      "schema": { "$ref": "#/entities/StockAlert" },
+      "description": "Stock alerts for the company"
+    }
+  }
+}

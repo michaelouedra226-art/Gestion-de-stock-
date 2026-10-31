@@ -1,0 +1,6 @@
+{
+  "name": "StockFlow",
+  "description": "Plateforme premium de gestion de stocks et flux B2B avec synchronisation temps réel et multi-tenancy.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

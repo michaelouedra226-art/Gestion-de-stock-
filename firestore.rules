@@ -1,0 +1,165 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isCompanyMember(companyId) {
+      return isSignedIn() && (
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == companyId) ||
+        (exists(/databases/$(database)/documents/companies/$(companyId)) &&
+         get(/databases/$(database)/documents/companies/$(companyId)).data.ownerId == request.auth.uid)
+      );
+    }
+
+    function isValidUser(data) {
+      return data.uid is string && data.uid == request.auth.uid &&
+             data.email is string && data.email.size() <= 200 &&
+             (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 100)) &&
+             (!('companyId' in data) || (data.companyId is string && data.companyId.size() <= 128)) &&
+             (!('role' in data) || data.role in ['owner', 'admin', 'member']);
+    }
+
+    function isValidCompany(data) {
+      return data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+             data.brandColor is string && data.brandColor.size() <= 20 &&
+             data.currency is string && data.currency.size() <= 10 &&
+             data.ownerId is string && data.ownerId.size() <= 128 &&
+             (!('defaultThreshold' in data) || (data.defaultThreshold is int && data.defaultThreshold >= 0)) &&
+             (!('locale' in data) || (data.locale is string && data.locale.size() <= 20)) &&
+             (!('slug' in data) || (data.slug is string && data.slug.size() <= 100));
+    }
+
+    function isValidProduct(data) {
+      return data.companyId is string && data.companyId.size() <= 128 &&
+             data.sku is string && data.sku.size() >= 1 && data.sku.size() <= 50 &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 150 &&
+             data.stock is int && data.stock >= 0 &&
+             data.threshold is int && data.threshold >= 0 &&
+             (!('description' in data) || (data.description is string && data.description.size() <= 1000)) &&
+             (!('categoryId' in data) || (data.categoryId is string && data.categoryId.size() <= 128)) &&
+             (!('unitPrice' in data) || (data.unitPrice is number && data.unitPrice >= 0)) &&
+             (!('archived' in data) || data.archived is bool);
+    }
+
+    function isValidMovement(data) {
+      return data.companyId is string && data.companyId.size() <= 128 &&
+             data.productId is string && data.productId.size() <= 128 &&
+             data.type in ['in', 'out'] &&
+             data.quantity is int && data.quantity > 0 &&
+             (!('productName' in data) || (data.productName is string && data.productName.size() <= 150)) &&
+             (!('reason' in data) || (data.reason is string && data.reason.size() <= 500)) &&
+             (!('date' in data) || data.date is timestamp);
+    }
+
+    function isValidCategory(data) {
+      return data.companyId is string && data.companyId.size() <= 128 &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+             (!('color' in data) || (data.color is string && data.color.size() <= 20));
+    }
+
+    function isValidAlert(data) {
+      return data.companyId is string && data.companyId.size() <= 128 &&
+             data.productId is string && data.productId.size() <= 128 &&
+             data.resolved is bool &&
+             (!('productName' in data) || (data.productName is string && data.productName.size() <= 150)) &&
+             (!('currentStock' in data) || data.currentStock is int) &&
+             (!('threshold' in data) || data.threshold is int) &&
+             (!('triggeredAt' in data) || data.triggeredAt is timestamp) &&
+             (!('resolvedAt' in data) || data.resolvedAt is timestamp);
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && request.auth.uid == userId &&
+                       incoming().uid == request.auth.uid &&
+                       isValidUser(incoming());
+      allow update: if isSignedIn() && request.auth.uid == userId &&
+                       incoming().uid == request.auth.uid &&
+                       isValidUser(incoming());
+      allow delete: if false;
+    }
+
+    match /companies/{companyId} {
+      allow get: if isSignedIn() && (isCompanyMember(companyId) || resource.data.ownerId == request.auth.uid);
+      allow create: if isSignedIn() && isValidCompany(incoming()) &&
+                       incoming().ownerId == request.auth.uid &&
+                       incoming().createdAt is timestamp &&
+                       incoming().createdAt <= request.time;
+      allow update: if isSignedIn() && isCompanyMember(companyId) &&
+                       incoming().ownerId == existing().ownerId &&
+                       incoming().createdAt == existing().createdAt &&
+                       isValidCompany(incoming());
+      allow delete: if false;
+
+      match /products/{productId} {
+        allow get, list: if isCompanyMember(companyId);
+        allow create: if isCompanyMember(companyId) &&
+                         incoming().companyId == companyId &&
+                         incoming().createdAt is timestamp &&
+                         incoming().createdAt <= request.time &&
+                         isValidProduct(incoming());
+        allow update: if isCompanyMember(companyId) &&
+                         incoming().companyId == existing().companyId &&
+                         incoming().createdAt == existing().createdAt &&
+                         isValidProduct(incoming());
+        allow delete: if isCompanyMember(companyId);
+      }
+
+      match /movements/{movementId} {
+        allow get, list: if isCompanyMember(companyId);
+        allow create: if isCompanyMember(companyId) &&
+                         incoming().companyId == companyId &&
+                         incoming().createdAt is timestamp &&
+                         incoming().createdAt <= request.time &&
+                         isValidMovement(incoming());
+        allow update: if false;
+        allow delete: if false;
+      }
+
+      match /categories/{categoryId} {
+        allow get, list: if isCompanyMember(companyId);
+        allow create: if isCompanyMember(companyId) &&
+                         incoming().companyId == companyId &&
+                         incoming().createdAt is timestamp &&
+                         incoming().createdAt <= request.time &&
+                         isValidCategory(incoming());
+        allow update: if isCompanyMember(companyId) &&
+                         incoming().companyId == existing().companyId &&
+                         incoming().createdAt == existing().createdAt &&
+                         isValidCategory(incoming());
+        allow delete: if isCompanyMember(companyId);
+      }
+
+      match /alerts/{alertId} {
+        allow get, list: if isCompanyMember(companyId);
+        allow create: if isCompanyMember(companyId) &&
+                         incoming().companyId == companyId &&
+                         isValidAlert(incoming());
+        allow update: if isCompanyMember(companyId) &&
+                         incoming().companyId == existing().companyId &&
+                         isValidAlert(incoming());
+        allow delete: if isCompanyMember(companyId);
+      }
+    }
+  }
+}

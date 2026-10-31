@@ -101,15 +101,14 @@ fun StockFlowApp(repository: StockFlowRepository) {
         }
     }
 
-    if (currentUser == null) {
-        StockFlowTheme {
-            AuthScreen(
-                onAuthSuccess = { currentUser = Firebase.auth.currentUser }
-            )
-        }
+    val user = currentUser
+    if (user == null) {
+        AuthScreen(
+            onAuthSuccess = { currentUser = Firebase.auth.currentUser }
+        )
     } else {
         AuthenticatedAppContent(
-            userId = currentUser!!.uid,
+            userId = user.uid,
             repository = repository,
             onSignOutRequested = {
                 Firebase.auth.signOut()
@@ -128,7 +127,10 @@ fun AuthenticatedAppContent(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val credentialManager = remember { CredentialManager.create(context) }
-    val profileState by repository.observeUserProfileState(userId).collectAsState(initial = com.example.data.model.UserProfileState.Loading)
+    
+    // Remember flow to prevent creating new flows and listener churn on every recomposition
+    val profileFlow = remember(userId) { repository.observeUserProfileState(userId) }
+    val profileState by profileFlow.collectAsState(initial = com.example.data.model.UserProfileState.Loading)
 
     var activeCompanyId by remember { mutableStateOf<String?>(null) }
     var timedOut by remember { mutableStateOf(false) }
@@ -150,18 +152,27 @@ fun AuthenticatedAppContent(
     }
 
     if (!activeCompanyId.isNullOrBlank()) {
-        // Main Company Workspace
-        val userProfile = (profileState as? com.example.data.model.UserProfileState.Loaded)?.profile
-        val company by repository.observeCompany(activeCompanyId!!).collectAsState(initial = null)
-        val products by repository.observeProducts(activeCompanyId!!).collectAsState(initial = emptyList())
-        val movements by repository.observeMovements(activeCompanyId!!).collectAsState(initial = emptyList())
-        val alerts by repository.observeAlerts(activeCompanyId!!).collectAsState(initial = emptyList())
-        val categories by repository.observeCategories(activeCompanyId!!).collectAsState(initial = emptyList())
+        val cid = activeCompanyId!!
+        val companyFlow = remember(cid) { repository.observeCompany(cid) }
+        val company by companyFlow.collectAsState(initial = null)
 
-        val currentCompany = company ?: Company(id = activeCompanyId!!, name = "Mon Entreprise")
+        val productsFlow = remember(cid) { repository.observeProducts(cid) }
+        val products by productsFlow.collectAsState(initial = emptyList())
+
+        val movementsFlow = remember(cid) { repository.observeMovements(cid) }
+        val movements by movementsFlow.collectAsState(initial = emptyList())
+
+        val alertsFlow = remember(cid) { repository.observeAlerts(cid) }
+        val alerts by alertsFlow.collectAsState(initial = emptyList())
+
+        val categoriesFlow = remember(cid) { repository.observeCategories(cid) }
+        val categories by categoriesFlow.collectAsState(initial = emptyList())
+
+        val userProfile = (profileState as? com.example.data.model.UserProfileState.Loaded)?.profile
+        val currentCompany = company ?: Company(id = cid, name = "Mon Entreprise")
         val brandColor = parseHexColor(currentCompany.brandColor)
 
-        StockFlowTheme(brandColor = brandColor) {
+        androidx.compose.runtime.CompositionLocalProvider(LocalBrandColor provides brandColor) {
             CompanyWorkspaceContent(
                 company = currentCompany,
                 userProfile = userProfile,
@@ -182,14 +193,12 @@ fun AuthenticatedAppContent(
         }
     } else if (forceOnboarding || profileState is com.example.data.model.UserProfileState.Loaded) {
         // User has no company yet or chose to proceed directly -> redirect to 3-step Onboarding Wizard
-        StockFlowTheme {
-            OnboardingScreen(
-                repository = repository,
-                onCompleted = { newCompanyId ->
-                    activeCompanyId = newCompanyId
-                }
-            )
-        }
+        OnboardingScreen(
+            repository = repository,
+            onCompleted = { newCompanyId ->
+                activeCompanyId = newCompanyId
+            }
+        )
     } else if (profileState is com.example.data.model.UserProfileState.Error) {
         val err = (profileState as com.example.data.model.UserProfileState.Error).message
         Box(

@@ -1,11 +1,13 @@
 package com.example.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -82,6 +84,13 @@ fun OnboardingScreen(
     var isSubmitting by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
+    // Intercept back gesture so it steps back instead of exiting the entire app
+    BackHandler(enabled = true) {
+        if (step > 1) {
+            step -= 1
+        }
+    }
+
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val currentBrandColor = parseHexColor(brandColorHex)
@@ -99,10 +108,10 @@ fun OnboardingScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp, vertical = 20.dp)
         ) {
-            // Fine animated progress bar
-            val progress = step / 3f
+            // Fine animated progress bar (using direct float to ensure broad compatibility)
+            val progress = (step / 3f).coerceIn(0f, 1f)
             LinearProgressIndicator(
-                progress = { progress },
+                progress = progress,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(4.dp)
@@ -395,7 +404,7 @@ fun OnboardingScreen(
                         onClick = { step -= 1 },
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = TextSecondary),
-                        border = ButtonDefaults.outlinedButtonBorder.copy(brush = androidx.compose.ui.graphics.SolidColor(DarkBorder)),
+                        border = BorderStroke(1.dp, DarkBorder),
                         modifier = Modifier.testTag("onboarding_prev_button")
                     ) {
                         Text("Précédent")

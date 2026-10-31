@@ -1,6 +1,7 @@
 package com.example.data.repository
 
 import android.content.Context
+import android.util.Log
 import com.example.R
 import com.example.data.model.Category
 import com.example.data.model.Company
@@ -25,6 +26,8 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
 import java.util.UUID
+
+private const val TAG = "StockFlowRepo"
 
 private fun resolveDb(context: Context): FirebaseFirestore {
     com.example.StockFlowApplication.ensureFirebaseInitialized(context)
@@ -79,10 +82,15 @@ class StockFlowRepository(
                 trySend(UserProfileState.Error(error.localizedMessage ?: "Erreur de synchronisation Firestore."))
                 return@addSnapshotListener
             }
-            if (snapshot != null && snapshot.exists()) {
-                val profile = snapshot.toObject(UserProfile::class.java)
-                trySend(UserProfileState.Loaded(profile))
-            } else {
+            try {
+                if (snapshot != null && snapshot.exists()) {
+                    val profile = snapshot.toObject(UserProfile::class.java)
+                    trySend(UserProfileState.Loaded(profile))
+                } else {
+                    trySend(UserProfileState.Loaded(null))
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error deserializing user profile: ${e.message}", e)
                 trySend(UserProfileState.Loaded(null))
             }
         }
@@ -95,12 +103,17 @@ class StockFlowRepository(
         val registration = docRef.addSnapshotListener { snapshot, error ->
             if (error != null) {
                 handleFirestoreError(error, OperationType.GET, path)
-                close(error)
+                trySend(null)
                 return@addSnapshotListener
             }
-            if (snapshot != null && snapshot.exists()) {
-                trySend(snapshot.toObject(UserProfile::class.java))
-            } else {
+            try {
+                if (snapshot != null && snapshot.exists()) {
+                    trySend(snapshot.toObject(UserProfile::class.java))
+                } else {
+                    trySend(null)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error deserializing UserProfile: ${e.message}", e)
                 trySend(null)
             }
         }
@@ -140,12 +153,17 @@ class StockFlowRepository(
         val registration = docRef.addSnapshotListener { snapshot, error ->
             if (error != null) {
                 handleFirestoreError(error, OperationType.GET, path)
-                close(error)
+                trySend(null)
                 return@addSnapshotListener
             }
-            if (snapshot != null && snapshot.exists()) {
-                trySend(snapshot.toObject(Company::class.java))
-            } else {
+            try {
+                if (snapshot != null && snapshot.exists()) {
+                    trySend(snapshot.toObject(Company::class.java))
+                } else {
+                    trySend(null)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error deserializing Company: ${e.message}", e)
                 trySend(null)
             }
         }
@@ -241,7 +259,7 @@ class StockFlowRepository(
         val registration = query.addSnapshotListener { snapshot, error ->
             if (error != null) {
                 handleFirestoreError(error, OperationType.LIST, path)
-                close(error)
+                trySend(emptyList())
                 return@addSnapshotListener
             }
             val list = snapshot?.documents?.mapNotNull { it.toObject(Product::class.java) } ?: emptyList()
@@ -479,7 +497,7 @@ class StockFlowRepository(
         val registration = query.addSnapshotListener { snapshot, error ->
             if (error != null) {
                 handleFirestoreError(error, OperationType.LIST, path)
-                close(error)
+                trySend(emptyList())
                 return@addSnapshotListener
             }
             val list = snapshot?.documents?.mapNotNull { it.toObject(Movement::class.java) } ?: emptyList()
@@ -502,7 +520,7 @@ class StockFlowRepository(
         val registration = query.addSnapshotListener { snapshot, error ->
             if (error != null) {
                 handleFirestoreError(error, OperationType.LIST, path)
-                close(error)
+                trySend(emptyList())
                 return@addSnapshotListener
             }
             val list = snapshot?.documents?.mapNotNull { it.toObject(Movement::class.java) } ?: emptyList()
@@ -524,7 +542,7 @@ class StockFlowRepository(
         val registration = query.addSnapshotListener { snapshot, error ->
             if (error != null) {
                 handleFirestoreError(error, OperationType.LIST, path)
-                close(error)
+                trySend(emptyList())
                 return@addSnapshotListener
             }
             val list = snapshot?.documents?.mapNotNull { it.toObject(Category::class.java) } ?: emptyList()
@@ -577,7 +595,7 @@ class StockFlowRepository(
         val registration = query.addSnapshotListener { snapshot, error ->
             if (error != null) {
                 handleFirestoreError(error, OperationType.LIST, path)
-                close(error)
+                trySend(emptyList())
                 return@addSnapshotListener
             }
             val list = snapshot?.documents?.mapNotNull { it.toObject(StockAlert::class.java) } ?: emptyList()

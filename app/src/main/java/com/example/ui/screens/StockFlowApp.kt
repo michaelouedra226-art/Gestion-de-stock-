@@ -17,9 +17,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -28,6 +31,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,8 +45,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
 import com.example.data.model.Company
@@ -122,41 +128,30 @@ fun AuthenticatedAppContent(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val credentialManager = remember { CredentialManager.create(context) }
-    val userProfile by repository.observeUserProfile(userId).collectAsState(initial = null)
+    val profileState by repository.observeUserProfileState(userId).collectAsState(initial = com.example.data.model.UserProfileState.Loading)
 
     var activeCompanyId by remember { mutableStateOf<String?>(null) }
+    var timedOut by remember { mutableStateOf(false) }
+    var forceOnboarding by remember { mutableStateOf(false) }
 
-    // Synchronize activeCompanyId from userProfile
-    if (userProfile != null && activeCompanyId == null && userProfile!!.companyId.isNotBlank()) {
-        activeCompanyId = userProfile!!.companyId
+    LaunchedEffect(Unit) {
+        delay(2500)
+        timedOut = true
     }
 
-    if (userProfile == null) {
-        // Loading user profile
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(DarkBg),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                CircularProgressIndicator(color = Color(0xFF5EEAD4))
-                Spacer(modifier = Modifier.height(14.dp))
-                Text("Chargement de votre session…", color = TextSecondary, fontSize = 13.sp)
+    // Synchronize activeCompanyId from userProfile when loaded
+    LaunchedEffect(profileState) {
+        if (profileState is com.example.data.model.UserProfileState.Loaded) {
+            val prof = (profileState as com.example.data.model.UserProfileState.Loaded).profile
+            if (prof != null && prof.companyId.isNotBlank()) {
+                activeCompanyId = prof.companyId
             }
         }
-    } else if (activeCompanyId.isNullOrBlank()) {
-        // User has no company yet -> redirect to 3-step Onboarding Wizard
-        StockFlowTheme {
-            OnboardingScreen(
-                repository = repository,
-                onCompleted = { newCompanyId ->
-                    activeCompanyId = newCompanyId
-                }
-            )
-        }
-    } else {
+    }
+
+    if (!activeCompanyId.isNullOrBlank()) {
         // Main Company Workspace
+        val userProfile = (profileState as? com.example.data.model.UserProfileState.Loaded)?.profile
         val company by repository.observeCompany(activeCompanyId!!).collectAsState(initial = null)
         val products by repository.observeProducts(activeCompanyId!!).collectAsState(initial = emptyList())
         val movements by repository.observeMovements(activeCompanyId!!).collectAsState(initial = emptyList())
@@ -184,6 +179,115 @@ fun AuthenticatedAppContent(
                     }
                 }
             )
+        }
+    } else if (forceOnboarding || profileState is com.example.data.model.UserProfileState.Loaded) {
+        // User has no company yet or chose to proceed directly -> redirect to 3-step Onboarding Wizard
+        StockFlowTheme {
+            OnboardingScreen(
+                repository = repository,
+                onCompleted = { newCompanyId ->
+                    activeCompanyId = newCompanyId
+                }
+            )
+        }
+    } else if (profileState is com.example.data.model.UserProfileState.Error) {
+        val err = (profileState as com.example.data.model.UserProfileState.Error).message
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(DarkBg)
+                .padding(24.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(DarkSurface)
+                    .border(1.dp, DarkBorder, RoundedCornerShape(16.dp))
+                    .padding(24.dp)
+            ) {
+                Text(
+                    text = "Initialisation de session",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        color = TextPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = err,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        color = RedDanger,
+                        textAlign = TextAlign.Center
+                    )
+                )
+                Spacer(modifier = Modifier.height(20.dp))
+                Button(
+                    onClick = { forceOnboarding = true },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF5EEAD4),
+                        contentColor = Color(0xFF0A0E1A)
+                    ),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Créer ou configurer mon entreprise", fontWeight = FontWeight.Bold)
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                OutlinedButton(
+                    onClick = { onSignOutRequested() },
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TextSecondary),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Se déconnecter")
+                }
+            }
+        }
+    } else {
+        // Profile is Loading (< 2.5 seconds or timed out)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(DarkBg)
+                .padding(24.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                CircularProgressIndicator(color = Color(0xFF5EEAD4))
+                Spacer(modifier = Modifier.height(14.dp))
+                Text("Chargement de votre session…", color = TextSecondary, fontSize = 13.sp)
+
+                if (timedOut) {
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Text(
+                        text = "La synchronisation prend du temps.",
+                        color = TextMuted,
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = { forceOnboarding = true },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF5EEAD4),
+                            contentColor = Color(0xFF0A0E1A)
+                        ),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("Accéder à l'accueil / configuration", fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = { onSignOutRequested() },
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = TextSecondary),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("Se déconnecter")
+                    }
+                }
+            }
         }
     }
 }

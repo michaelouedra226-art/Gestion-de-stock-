@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">StockFlow</string>
+    <string name="default_web_client_id" translatable="false">405168602623-kf2tpr1h9kpfmmk9kg72rmibs7fpt4it.apps.googleusercontent.com</string>
 </resources>

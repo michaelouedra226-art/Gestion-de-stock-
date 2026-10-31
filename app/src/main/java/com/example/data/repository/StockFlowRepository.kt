@@ -8,6 +8,7 @@ import com.example.data.model.Movement
 import com.example.data.model.Product
 import com.example.data.model.StockAlert
 import com.example.data.model.UserProfile
+import com.example.data.model.UserProfileState
 import com.google.firebase.Firebase
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
@@ -40,6 +41,26 @@ class StockFlowRepository(
     fun requireUserId(): String {
         return auth.currentUser?.uid
             ?: throw IllegalStateException("User must be signed in with Google before accessing Firestore.")
+    }
+
+    fun observeUserProfileState(userId: String): Flow<UserProfileState> = callbackFlow {
+        trySend(UserProfileState.Loading)
+        val path = "users/$userId"
+        val docRef = db.collection("users").document(userId)
+        val registration = docRef.addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                handleFirestoreError(error, OperationType.GET, path)
+                trySend(UserProfileState.Error(error.localizedMessage ?: "Erreur de synchronisation Firestore."))
+                return@addSnapshotListener
+            }
+            if (snapshot != null && snapshot.exists()) {
+                val profile = snapshot.toObject(UserProfile::class.java)
+                trySend(UserProfileState.Loaded(profile))
+            } else {
+                trySend(UserProfileState.Loaded(null))
+            }
+        }
+        awaitClose { registration.remove() }
     }
 
     fun observeUserProfile(userId: String): Flow<UserProfile?> = callbackFlow {

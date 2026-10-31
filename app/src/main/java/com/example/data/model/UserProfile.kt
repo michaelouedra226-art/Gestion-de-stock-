@@ -15,3 +15,9 @@ data class UserProfile(
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 )
+
+sealed interface UserProfileState {
+    object Loading : UserProfileState
+    data class Loaded(val profile: UserProfile?) : UserProfileState
+    data class Error(val message: String) : UserProfileState
+}

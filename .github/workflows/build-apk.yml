@@ -46,18 +46,23 @@ jobs:
             cp .env.example .env
           fi
 
-          # Ensure debug.keystore exists (restore from base64 or generate if missing)
+          # Ensure debug.keystore exists with the exact certificate registered in Firebase
           if [ ! -f debug.keystore ]; then
             if [ -f debug.keystore.base64 ]; then
-              echo "Restoring debug.keystore from base64..."
+              echo "Restoring debug.keystore from debug.keystore.base64..."
               base64 -d debug.keystore.base64 > debug.keystore || true
             fi
             if [ ! -f debug.keystore ] || [ ! -s debug.keystore ]; then
-              echo "debug.keystore not found or empty, generating via keytool..."
+              echo "Restoring registered official debug.keystore from embedded base64..."
+              echo "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" | base64 -d > debug.keystore
+            fi
+            if [ ! -f debug.keystore ] || [ ! -s debug.keystore ]; then
+              echo "Generating fallback debug.keystore..."
               keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
             fi
           fi
           ls -la debug.keystore
+          keytool -list -v -keystore debug.keystore -storepass android | grep -i "SHA1:" || true
 
           # Ensure gradle wrapper is executable
           chmod +x gradlew

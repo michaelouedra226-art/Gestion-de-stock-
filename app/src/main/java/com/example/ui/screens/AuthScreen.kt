@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
 import android.util.Log
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -54,7 +56,9 @@ import com.example.R
 import com.example.ui.theme.DarkBg
 import com.example.ui.theme.DarkBorder
 import com.example.ui.theme.DarkSurface
+import com.example.ui.theme.DarkSurfaceCard
 import com.example.ui.theme.LocalBrandColor
+import com.example.ui.theme.RedDanger
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
@@ -69,6 +73,15 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
+private fun Context.findActivity(): Activity? {
+    var ctx = this
+    while (ctx is ContextWrapper) {
+        if (ctx is Activity) return ctx
+        ctx = ctx.baseContext
+    }
+    return null
+}
+
 @Composable
 fun AuthScreen(
     onAuthSuccess: () -> Unit
@@ -77,6 +90,7 @@ fun AuthScreen(
     val coroutineScope = rememberCoroutineScope()
     val credentialManager = remember { CredentialManager.create(context) }
     var isLoading by remember { mutableStateOf(false) }
+    var authErrorDialog by remember { mutableStateOf<String?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
     val brand = LocalBrandColor.current
 
@@ -161,21 +175,20 @@ fun AuthScreen(
             ) {
                 Text(
                     text = "SF",
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 20.sp,
                     color = Color(0xFF0A0E1A)
                 )
             }
 
-            Spacer(modifier = Modifier.height(18.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             Text(
                 text = "StockFlow",
-                style = MaterialTheme.typography.headlineMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary,
-                    letterSpacing = (-0.5).sp
-                )
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                color = TextPrimary,
+                letterSpacing = (-0.5).sp
             )
 
             Spacer(modifier = Modifier.height(6.dp))
@@ -205,6 +218,7 @@ fun AuthScreen(
                         },
                         onError = { message ->
                             isLoading = false
+                            authErrorDialog = message
                             coroutineScope.launch {
                                 snackbarHostState.showSnackbar(message)
                             }
@@ -226,11 +240,22 @@ fun AuthScreen(
                     .testTag("google_sign_in_button")
             ) {
                 if (isLoading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(22.dp),
-                        color = Color(0xFF0F172A),
-                        strokeWidth = 2.dp
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = Color(0xFF0F172A),
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "Connexion en cours…",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 14.sp
+                        )
+                    }
                 } else {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -264,6 +289,44 @@ fun AuthScreen(
             )
         }
 
+        if (authErrorDialog != null) {
+            AlertDialog(
+                onDismissRequest = { authErrorDialog = null },
+                title = {
+                    Text(
+                        text = "Information de connexion",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                    )
+                },
+                text = {
+                    Text(
+                        text = authErrorDialog ?: "",
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            color = TextSecondary,
+                            lineHeight = 20.sp
+                        )
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = { authErrorDialog = null },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = brand,
+                            contentColor = Color(0xFF0A0E1A)
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Compris", fontWeight = FontWeight.Bold)
+                    }
+                },
+                containerColor = DarkSurfaceCard,
+                shape = RoundedCornerShape(16.dp)
+            )
+        }
+
         SnackbarHost(
             hostState = snackbarHostState,
             modifier = Modifier
@@ -281,11 +344,18 @@ private fun executeGoogleSignIn(
     onError: (String) -> Unit,
     onCancelled: () -> Unit
 ) {
+    val activity = context.findActivity()
+    if (activity == null) {
+        Log.e("Auth", "Unable to locate host Activity from context: $context")
+        onError("Impossible d'associer la fenêtre d'authentification Google (Activity manquante).")
+        return
+    }
+
     val serverClientId = try {
         context.getString(R.string.default_web_client_id)
     } catch (e: Exception) {
         Log.e("Auth", "Failed to retrieve default_web_client_id", e)
-        onError("Configuration Google Sign-In introuvable")
+        onError("Configuration Google Sign-In introuvable (default_web_client_id manquant).")
         return
     }
 
@@ -296,7 +366,7 @@ private fun executeGoogleSignIn(
 
     coroutineScope.launch {
         try {
-            val result = credentialManager.getCredential(context as Activity, request)
+            val result = credentialManager.getCredential(activity, request)
             val credential = result.credential
             if (credential is CustomCredential && credential.type == TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
                 val googleIdToken = GoogleIdTokenCredential.createFrom(credential.data).idToken
@@ -304,14 +374,25 @@ private fun executeGoogleSignIn(
                 Firebase.auth.signInWithCredential(authCredential).await()
                 onSuccess()
             } else {
-                onError("Type d'identifiant inattendu")
+                onError("Type d'identifiant Google inattendu (${credential.type}).")
             }
         } catch (e: GetCredentialCancellationException) {
-            Log.w("Auth", "Google Sign-In cancelled: ${e.message}", e)
+            Log.w("Auth", "Google Sign-In cancelled by user: ${e.message}")
             onCancelled()
         } catch (e: Exception) {
             Log.e("Auth", "Google Sign-In failed", e)
-            onError(e.localizedMessage ?: "Échec de connexion Google")
+            val rawMsg = e.message ?: e.localizedMessage ?: ""
+            val userMsg = when {
+                rawMsg.contains("10") || rawMsg.contains("DEVELOPER_ERROR") ->
+                    "Erreur Google (Code 10 : DEVELOPER_ERROR).\n\nL'application n'est pas autorisée par Firebase pour cette signature. Assurez-vous d'utiliser l'APK officiel signé avec l'empreinte SHA-1 enregistrée (9D:D2:70:BD:58:5B:EF:15:21:25:92:53:DE:93:4E:81:69:30:08:0F)."
+                rawMsg.contains("16") || rawMsg.contains("CANCELLED") ->
+                    "Sélection de compte annulée ou aucun compte Google valide disponible sur cet appareil."
+                rawMsg.contains("network", ignoreCase = true) || rawMsg.contains("timeout", ignoreCase = true) ->
+                    "Connexion réseau impossible. Vérifiez votre connexion Internet."
+                else ->
+                    "Échec de connexion Google : ${e.localizedMessage ?: "erreur inconnue"}"
+            }
+            onError(userMsg)
         }
     }
 }

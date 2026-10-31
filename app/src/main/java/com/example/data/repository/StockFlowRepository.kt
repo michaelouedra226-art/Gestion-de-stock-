@@ -26,16 +26,42 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
 import java.util.UUID
 
+private fun resolveDb(context: Context): FirebaseFirestore {
+    com.example.StockFlowApplication.ensureFirebaseInitialized(context)
+    val dbId = try {
+        context.applicationContext.getString(R.string.firestore_database_id)
+    } catch (_: Exception) {
+        ""
+    }
+    return try {
+        if (dbId.isNotBlank()) {
+            FirebaseFirestore.getInstance(dbId)
+        } else {
+            FirebaseFirestore.getInstance()
+        }
+    } catch (e: Exception) {
+        android.util.Log.w("StockFlowRepository", "Fallback to default Firestore: ${e.message}")
+        FirebaseFirestore.getInstance()
+    }
+}
+
+private fun resolveAuth(context: Context): FirebaseAuth {
+    com.example.StockFlowApplication.ensureFirebaseInitialized(context)
+    return try {
+        Firebase.auth
+    } catch (_: Exception) {
+        FirebaseAuth.getInstance()
+    }
+}
+
 class StockFlowRepository(
     private val db: FirebaseFirestore,
-    private val auth: FirebaseAuth = Firebase.auth
+    private val auth: FirebaseAuth = try { Firebase.auth } catch (_: Exception) { FirebaseAuth.getInstance() }
 ) {
 
     constructor(context: Context) : this(
-        FirebaseFirestore.getInstance(
-            context.applicationContext.getString(R.string.firestore_database_id)
-        ),
-        Firebase.auth
+        resolveDb(context),
+        resolveAuth(context)
     )
 
     fun requireUserId(): String {
